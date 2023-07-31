@@ -31,13 +31,22 @@ jobs:
 
   build-and-test-windows:
     #if: false  # Temporarily disable
-    name: Build And Test Windows ${{ matrix.os-version }} ${{ matrix.crypto }}
+    name: Build And Test Windows ${{ matrix.os-version }} ${{ matrix.architecture.cmakename }} ${{ matrix.crypto }}
     runs-on: windows-${{ matrix.os-version }}
     strategy:
       fail-fast: false
       matrix:
         os-version: [2019, 2022]
         crypto: [OpenSSL, BCrypt]
+        architecture:
+        - {
+            cmakename: win32,
+            triplet: x86-windows
+          }
+        - {
+            cmakename: x64,
+            triplet: x64-windows
+          }
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
     steps:
@@ -46,7 +55,7 @@ jobs:
       - uses: lukka/get-cmake@latest
 
       # Setup MSVC command prompt environment vars.
-      # We must do this before sedtting up our local vcpkg,
+      # We must do this before setting up our local vcpkg,
       # Because it will set VCPKG_ROOT to point to some global
       # install of vcpkg, and we don't want that
       - uses: ilammy/msvc-dev-cmd@v1
@@ -61,14 +70,14 @@ jobs:
 
       - name: vcpkg check / install dependencies
         working-directory: '${{ github.workspace }}'
-        run: '"${{env.VCPKG_ROOT}}\\vcpkg" install --triplet=x64-windows'
+        run: '"${{env.VCPKG_ROOT}}\\vcpkg" install --triplet=${{matrix.architecture.triplet}}'
         shell: cmd
 
       - name: Install dependencies and generate project files
         run: |
           mkdir build
           cd build
-          cmake -S .. -G Ninja -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DBUILD_TOOLS=ON -DCMAKE_TOOLCHAIN_FILE=${{env.VCPKG_ROOT}}/scripts/buildsystems/vcpkg.cmake -DUSE_CRYPTO=${{matrix.crypto}}
+          cmake -S .. -A${{matrix.architecture.cmakename}} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DBUILD_TOOLS=ON -DCMAKE_TOOLCHAIN_FILE=${{env.VCPKG_ROOT}}/scripts/buildsystems/vcpkg.cmake -DUSE_CRYPTO=${{matrix.crypto}} -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG="${{github.workspace}}/build/bin"
         shell: cmd
 
       # Mark all directories as safe so checkouts performed in CMakeLists.txt don't cause "unsafe repository" errors.
@@ -79,7 +88,7 @@ jobs:
 
       - name: Build projects
         working-directory: '${{ github.workspace }}/build'
-        run: ninja
+        run: cmake --build . --config debug
         shell: cmd
 
       - name: Test crypto
